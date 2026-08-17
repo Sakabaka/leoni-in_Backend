@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db/pool.js';
 import { authRequired, signToken } from '../utils/auth.js';
+import { validateMatricule, validatePassword } from '../utils/validation.js';
 
 const router = Router();
 const MOCK_OTP = '123456';
@@ -71,6 +72,14 @@ router.post('/auth/verify-credentials', async (req, res) => {
 
   if (!matricule || !password) {
     return res.status(400).json({ code: 'INVALID_CREDENTIALS', message: 'Matricule and password are required' });
+  }
+
+  // Validate inputs
+  if (!validateMatricule(matricule)) {
+    return res.status(400).json({ code: 'INVALID_CREDENTIALS', message: 'Invalid matricule format' });
+  }
+  if (!validatePassword(password)) {
+    return res.status(400).json({ code: 'INVALID_CREDENTIALS', message: 'Invalid password format' });
   }
 
   try {
