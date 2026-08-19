@@ -22,10 +22,10 @@ app.use(cors({
 
 // Rate limiting
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // max 5 attempts
+  windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 5),
   message: 'Too many login attempts. Please try again later.',
-  standardHeaders: false,
+  standardHeaders: true,
   legacyHeaders: false,
 });
 
