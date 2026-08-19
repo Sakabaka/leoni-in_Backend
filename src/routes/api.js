@@ -33,8 +33,14 @@ function currentEmployee(req) {
   return req.user || null;
 }
 
-router.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'leoni-in-backend' });
+router.get('/health', async (_req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT 1 + 1 AS ok');
+    res.json({ ok: rows[0]?.ok === 2, service: 'leoni-in-backend', db: 'connected' });
+  } catch (error) {
+    console.error('Health check error', error);
+    res.status(503).json({ ok: false, service: 'leoni-in-backend', db: 'unavailable' });
+  }
 });
 
 router.post('/auth/login', async (req, res) => {

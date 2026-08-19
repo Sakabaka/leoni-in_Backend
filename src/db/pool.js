@@ -20,24 +20,30 @@ export async function initializeDatabase() {
     port: dbConfig.port,
     user: dbConfig.user,
     password: dbConfig.password,
+    ssl: dbConfig.ssl,
   });
 
   try {
     const dbName = dbConfig.database;
     
-    // Create database if it doesn't exist
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\`;`);
+    // Managed providers usually provision the database and may deny CREATE DATABASE.
+    if (process.env.DB_CREATE_DATABASE !== 'false') {
+      await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\`;`);
+    }
     await connection.query(`USE \`${dbName}\`;`);
 
     // Read and execute schema.sql
     const schemaPath = path.join(__dirname, '../..', 'schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
 
-    // Split by semicolon and filter empty statements
+    // Remove SQL comments before splitting so statements preceded by comments run.
     const statements = schema
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n')
       .split(';')
       .map((stmt) => stmt.trim())
-      .filter((stmt) => stmt.length > 0 && !stmt.startsWith('--'));
+      .filter((stmt) => stmt.length > 0);
 
     for (const statement of statements) {
       try {

@@ -93,8 +93,8 @@ await connection.query(schema);
 const seed = `
 INSERT INTO employees (matricule, name, password_hash, role, department, phone, state, sector, address_line_1, address_line_2)
 VALUES
-  ('1234', 'John Doe', '$2a$10$Yx4I0nVV1X1Mq5iYxPj5fO7a5hK6B1bZL7f6FQp8Dsvv3cE3QQx2', 'user', 'Engineering', '+21600000001', 'Sousse', 'EX1', '12 Main Street', 'Sousse, Tunisia'),
-  ('9999', 'Sara Admin', '$2a$10$Yx4I0nVV1X1Mq5iYxPj5fO7a5hK6B1bZL7f6FQp8Dsvv3cE3QQx2', 'admin', 'Human Resources', '+21600000002', 'Tunis', 'HQ', '42 Avenue de la République', 'Tunis, Tunisia')
+  ('1234', 'John Doe', '$2a$10$5f.Tbs36wMqSkNbiqsDylemOnkpTJwFVJ1dP6i2pj1TCiyictLjim', 'user', 'Engineering', '+21600000001', 'Sousse', 'EX1', '12 Main Street', 'Sousse, Tunisia'),
+  ('9999', 'Sara Admin', '$2a$10$lxuKbvtmtet.ivb3B47LIOvc4g2Ae76alVpBFcQtiXSrrdAqLhB0C', 'admin', 'Human Resources', '+21600000002', 'Tunis', 'HQ', '42 Avenue de la République', 'Tunis, Tunisia')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 INSERT INTO news_posts (title, slug, status, author, summary, published_at, start_date, end_date, city, sector)

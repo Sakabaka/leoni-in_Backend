@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "build": "node src/scripts/init-db.js",
     "db:init": "node src/db/init.js",
-    "db:setup": "node src/db/initialize.js",
-    "build": "echo 'No build step required for this Node app'"
+    "db:setup": "node src/db/initialize.js"
   },
   "engines": {
     "node": "18.x"
