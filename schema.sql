@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS employees (
   role ENUM('user', 'admin') NOT NULL DEFAULT 'user',
   department VARCHAR(255),
   phone VARCHAR(50),
+  email VARCHAR(255),
   state VARCHAR(255),
   sector VARCHAR(255),
   address_line_1 VARCHAR(255),
@@ -19,6 +20,22 @@ CREATE TABLE IF NOT EXISTS employees (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_matricule (matricule),
   INDEX idx_role (role)
+);
+
+-- Short-lived, single-use 2FA challenges. Only the code hash is stored.
+CREATE TABLE IF NOT EXISTS two_factor_challenges (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  employee_id INT NOT NULL,
+  method ENUM('sms', 'whatsapp', 'email') NOT NULL,
+  destination VARCHAR(255) NOT NULL,
+  code_hash CHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  used_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  INDEX idx_2fa_employee (employee_id),
+  INDEX idx_2fa_expiry (expires_at)
 );
 
 -- News posts table

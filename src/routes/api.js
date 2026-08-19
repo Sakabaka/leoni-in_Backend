@@ -3,9 +3,9 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db/pool.js';
 import { authRequired, signToken } from '../utils/auth.js';
 import { validateMatricule, validatePassword } from '../utils/validation.js';
+import { codesMatch, deliverCode, generateCode, hashCode } from '../services/twoFactor.js';
 
 const router = Router();
-const MOCK_OTP = '123456';
 
 function employeeToProfile(row) {
   return {
@@ -110,22 +110,38 @@ router.post('/auth/verify-credentials', async (req, res) => {
 });
 
 router.post('/auth/2fa/send', async (req, res) => {
-  const { matricule } = req.body || {};
+  const { matricule, method = 'sms' } = req.body || {};
 
   if (!matricule) {
     return res.status(400).json({ message: 'Matricule is required' });
   }
+  if (!['sms', 'whatsapp', 'email'].includes(method)) {
+    return res.status(400).json({ message: 'Unsupported 2FA method' });
+  }
 
   try {
-    const [rows] = await pool.query('SELECT id FROM employees WHERE matricule = ?', [String(matricule).trim()]);
-    if (!rows.length) {
+    const [rows] = await pool.query('SELECT id, phone, email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const employee = rows[0];
+    if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    return res.json({ ok: true, method: 'sms', otp: MOCK_OTP });
+    const destination = method === 'email' ? employee.email : employee.phone;
+    if (!destination) {
+      return res.status(400).json({ message: `No ${method} destination is configured for this employee` });
+    }
+    const code = generateCode();
+    await pool.query(
+      `INSERT INTO two_factor_challenges (employee_id, method, destination, code_hash, expires_at)
+       VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))`,
+      [employee.id, method, destination, hashCode(code)]
+    );
+    await deliverCode({ method, destination, code });
+
+    return res.json({ ok: true, method, expiresInSeconds: 600 });
   } catch (error) {
     console.error('2FA send error', error);
-    return res.status(500).json({ message: 'Unable to send verification code' });
+    return res.status(503).json({ message: '2FA delivery is not configured yet' });
   }
 });
 
@@ -147,11 +163,24 @@ router.post('/auth/2fa/verify', async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    const normalized = String(code).trim().toLowerCase();
-    const isValid = normalized === 'skip' || normalized === 'demo' || normalized === '000000' || String(code).trim() === MOCK_OTP;
-    if (!isValid) {
+    const [challengeRows] = await pool.query(
+      `SELECT * FROM two_factor_challenges
+       WHERE employee_id = ? AND used_at IS NULL AND expires_at > NOW() AND attempts < 5
+       ORDER BY created_at DESC LIMIT 1`,
+      [employee.id]
+    );
+    const challenge = challengeRows[0];
+    if (!challenge) {
+      return res.status(401).json({ message: 'No active verification code. Request a new code.' });
+    }
+
+    const valid = codesMatch(String(code).trim(), challenge.code_hash);
+    await pool.query('UPDATE two_factor_challenges SET attempts = attempts + 1 WHERE id = ?', [challenge.id]);
+    if (!valid) {
       return res.status(401).json({ message: 'Invalid or expired code' });
     }
+
+    await pool.query('UPDATE two_factor_challenges SET used_at = NOW() WHERE id = ?', [challenge.id]);
 
     const token = signToken({
       matricule: employee.matricule,
