@@ -71,14 +71,17 @@ const server = app.listen(port, async () => {
   console.log(`Backend running on http://localhost:${port}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   
-  // Initialize database on startup
-  try {
-    console.log('Initializing database...');
-    await initializeDatabase();
-    console.log('✅ Database initialized');
-  } catch (error) {
-    console.error('❌ Database initialization failed:', error.message);
-    // Continue running even if DB init fails - it might already exist
+  if (process.env.DB_AUTO_INIT === 'true' || process.env.NODE_ENV !== 'production') {
+    try {
+      console.log('Initializing database...');
+      await initializeDatabase();
+      console.log('✅ Database initialized');
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error.message);
+      // Continue running so an externally managed schema can still be used.
+    }
+  } else {
+    console.log('Database auto-initialization disabled; using the existing schema.');
   }
 });
 

@@ -1,6 +1,15 @@
 import crypto from 'crypto';
 
 const TEST_CODE = process.env.TWO_FACTOR_TEST_CODE || '123456';
+const SUPPORTED_PROVIDERS = new Set(['console', 'twilio', 'resend', 'whatsapp']);
+
+export function providerForMethod(method) {
+  return process.env[`TWO_FACTOR_${method.toUpperCase()}_PROVIDER`] || process.env.TWO_FACTOR_PROVIDER || (process.env.NODE_ENV === 'production' ? null : 'console');
+}
+
+export function isMethodEnabled(method, destination) {
+  return Boolean(destination && SUPPORTED_PROVIDERS.has(providerForMethod(method)));
+}
 
 export function generateCode() {
   if (process.env.NODE_ENV !== 'production' && process.env.TWO_FACTOR_TEST_MODE === 'true') {
@@ -20,11 +29,15 @@ export function codesMatch(code, codeHash) {
 }
 
 export async function deliverCode({ method, destination, code }) {
-  const provider = process.env[`TWO_FACTOR_${method.toUpperCase()}_PROVIDER`] || process.env.TWO_FACTOR_PROVIDER || 'console';
+  const provider = providerForMethod(method);
 
   if (provider === 'console') {
     console.log(`[2FA console provider] ${method} code for ${destination}: ${code}`);
     return { provider, method };
+  }
+
+  if (!provider) {
+    throw new Error('No 2FA provider is configured for this environment');
   }
 
   const message = `Your Leoni-in verification code is ${code}. It expires in 10 minutes.`;
