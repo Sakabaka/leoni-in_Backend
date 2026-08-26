@@ -34,12 +34,12 @@ function currentEmployee(req) {
   return req.user || null;
 }
 
-router.get('/health', async (_req, res) => {
+router.get('/_legacy/health', async (_req, res) => {
   try {
     const [rows] = await pool.query('SELECT 1 + 1 AS ok');
     res.json({ ok: rows[0]?.ok === 2, service: 'leoni-in-backend', db: 'connected' });
   } catch (error) {
-    console.error('Health check error', error);
+    console.error('Legacy health check error', error);
     res.status(503).json({ ok: false, service: 'leoni-in-backend', db: 'unavailable' });
   }
 });

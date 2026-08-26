@@ -50,7 +50,7 @@ app.get('/health', async (_req, res) => {
     res.json({ ok, service: 'leoni-in-backend', db: ok ? 'connected' : 'unavailable' });
   } catch (error) {
     console.warn('Health check DB connection failed:', error.message);
-    res.json({ ok: false, service: 'leoni-in-backend', db: 'unavailable' });
+    res.status(503).json({ ok: false, service: 'leoni-in-backend', db: 'unavailable' });
   }
 });
 
