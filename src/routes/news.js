@@ -34,10 +34,14 @@ router.get('/news', authRequired, async (req, res) => {
 router.get('/news/posts', authRequired, async (_req, res) => {
   try {
     const [rows] = await pool.query(`SELECT p.*, JSON_ARRAYAGG(JSON_OBJECT('id', b.id, 'type', b.type, 'content', b.content, 'imageUrl', b.image_url, 'order', b.order)) AS blocks FROM news_posts p LEFT JOIN news_blocks b ON b.news_post_id = p.id GROUP BY p.id ORDER BY p.created_at DESC`);
-    return res.json(rows.map((post) => ({
-      ...post, blocks: post.blocks ? JSON.parse(post.blocks) : [], createdAt: post.created_at,
-      publishedAt: post.published_at, startDate: post.start_date, endDate: post.end_date,
-    })));
+    return res.json(rows.map((post) => {
+      const parsedBlocks = typeof post.blocks === 'string' ? JSON.parse(post.blocks) : post.blocks;
+      const blocks = Array.isArray(parsedBlocks) ? parsedBlocks.filter((block) => block?.id != null) : [];
+      return {
+        ...post, blocks, createdAt: post.created_at, publishedAt: post.published_at,
+        startDate: post.start_date, endDate: post.end_date,
+      };
+    }));
   } catch (error) {
     console.error('Get news posts error', error);
     return res.status(500).json({ message: 'Unable to fetch news posts' });
