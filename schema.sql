@@ -124,3 +124,16 @@ INSERT INTO news_posts (title, slug, status, author, summary, published_at, star
 VALUES
   ('Welcome to the new HR portal', 'welcome-to-the-new-hr-portal', 'published', 'HR Team', 'A quick overview of the new employee experience and benefits available this quarter.', '2026-08-02 09:05:00', '2026-08-01', '2026-12-31', 'Sousse', 'EX1')
 ON DUPLICATE KEY UPDATE title = VALUES(title);
+
+-- Upgrade existing installations created before email and 2FA were added.
+SET @email_column_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'employees' AND COLUMN_NAME = 'email'
+);
+SET @email_sql = IF(@email_column_exists = 0,
+  'ALTER TABLE employees ADD COLUMN email VARCHAR(255) NULL AFTER phone',
+  'SELECT 1'
+);
+PREPARE email_statement FROM @email_sql;
+EXECUTE email_statement;
+DEALLOCATE PREPARE email_statement;

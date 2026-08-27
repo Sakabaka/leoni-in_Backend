@@ -12,7 +12,7 @@ export function isMethodEnabled(method, destination) {
 }
 
 export function generateCode() {
-  if (process.env.NODE_ENV !== 'production' && process.env.TWO_FACTOR_TEST_MODE === 'true') {
+  if (process.env.TWO_FACTOR_TEST_MODE === 'true') {
     return TEST_CODE;
   }
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
