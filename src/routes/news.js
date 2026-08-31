@@ -8,6 +8,20 @@ function profileFilters(employee) {
   return { city: employee.state, sector: employee.sector };
 }
 
+function buildArticleBody(post, blocks = []) {
+  const blockText = blocks
+    .filter((block) => block && block.id != null)
+    .map((block) => {
+      if (block.type === 'heading') return `\n${block.content}`;
+      if (block.type === 'image') return block.imageUrl || block.content || '';
+      return block.content || '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return [post.summary, blockText].filter(Boolean).join('\n\n') || 'No preview available.';
+}
+
 router.get('/news', authRequired, async (req, res) => {
   try {
     const [employeeRows] = await pool.query('SELECT * FROM employees WHERE matricule = ?', [req.user.matricule]);
@@ -15,16 +29,22 @@ router.get('/news', authRequired, async (req, res) => {
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
     const filters = profileFilters(employee);
     const [rows] = await pool.query(
-      `SELECT * FROM news_posts WHERE status = 'published' AND (start_date IS NULL OR start_date <= CURDATE()) AND (end_date IS NULL OR end_date >= CURDATE())` +
-      (filters.city ? ' AND (city IS NULL OR city = ?)' : '') +
-      (filters.sector ? ' AND (sector IS NULL OR sector = ?)' : '') +
-      ' ORDER BY published_at DESC',
+      `SELECT p.*, JSON_ARRAYAGG(JSON_OBJECT('id', b.id, 'type', b.type, 'content', b.content, 'imageUrl', b.image_url, 'order', b.order)) AS blocks FROM news_posts p LEFT JOIN news_blocks b ON b.news_post_id = p.id WHERE p.status = 'published' AND (p.start_date IS NULL OR p.start_date <= CURDATE()) AND (p.end_date IS NULL OR p.end_date >= CURDATE())` +
+      (filters.city ? ' AND (p.city IS NULL OR p.city = ?)' : '') +
+      (filters.sector ? ' AND (p.sector IS NULL OR p.sector = ?)' : '') +
+      ' GROUP BY p.id ORDER BY p.published_at DESC',
       [filters.city, filters.sector].filter(Boolean),
     );
-    return res.json(rows.map((post) => ({
-      id: String(post.id), title: post.title, body: post.summary || 'No preview available.',
-      date: post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : new Date(post.created_at).toISOString().slice(0, 10),
-    })));
+    return res.json(rows.map((post) => {
+      const parsedBlocks = typeof post.blocks === 'string' ? JSON.parse(post.blocks) : post.blocks;
+      const blocks = Array.isArray(parsedBlocks) ? parsedBlocks : [];
+      return {
+        id: String(post.id),
+        title: post.title,
+        body: buildArticleBody(post, blocks),
+        date: post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : new Date(post.created_at).toISOString().slice(0, 10),
+      };
+    }));
   } catch (error) {
     console.error('Get news error', error);
     return res.status(500).json({ message: 'Unable to fetch news' });

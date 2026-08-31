@@ -77,12 +77,23 @@ CREATE TABLE IF NOT EXISTS document_requests (
   employee_id INT NOT NULL,
   type ENUM('fiche_paie', 'attestation_salaire', 'attestation_travail') NOT NULL,
   reason TEXT,
-  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  status ENUM('pending', 'in_progress', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
   INDEX idx_employee_id (employee_id),
   INDEX idx_status (status),
+  INDEX idx_created_at (created_at)
+);
+
+CREATE TABLE IF NOT EXISTS document_request_messages (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  request_id INT NOT NULL,
+  sender ENUM('employee', 'hr') NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (request_id) REFERENCES document_requests(id) ON DELETE CASCADE,
+  INDEX idx_request_id (request_id),
   INDEX idx_created_at (created_at)
 );
 
