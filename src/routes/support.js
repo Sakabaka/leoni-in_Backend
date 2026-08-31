@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authRequired } from '../utils/auth.js';
+import { sendPushNotification } from '../services/pushNotifications.js';
 
 const router = Router();
 
@@ -62,6 +63,8 @@ router.post('/support-tickets', authRequired, async (req, res) => {
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
     const [result] = await pool.query('INSERT INTO support_tickets (employee_id, category, subject, status) VALUES (?, ?, ?, ?)', [employee.id, category, subject, 'open']);
     await pool.query('INSERT INTO support_messages (ticket_id, sender, content) VALUES (?, ?, ?)', [result.insertId, 'employee', message]);
+    const [adminRows] = await pool.query("SELECT id FROM employees WHERE role = 'admin'");
+    void sendPushNotification(adminRows.map((row) => row.id), 'New employee message', `${req.user.matricule} sent a new message.`);
     return res.status(201).json({ id: String(result.insertId), category, subject, status: 'open', createdAt: new Date().toISOString(), messages: [{ id: 'generated', sender: 'employee', content: message, createdAt: new Date().toISOString() }] });
   } catch (error) {
     console.error('Create ticket error', error);
@@ -86,6 +89,13 @@ router.post('/support-tickets/:id/replies', authRequired, async (req, res) => {
     if (!allowedStatuses.has(nextStatus)) return res.status(400).json({ message: 'Invalid support ticket status' });
     await pool.query('INSERT INTO support_messages (ticket_id, sender, content) VALUES (?, ?, ?)', [req.params.id, sender, message]);
     await pool.query('UPDATE support_tickets SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
+    if (sender === 'hr') {
+      const [employeeRows] = await pool.query('SELECT employee_id FROM support_tickets WHERE id = ?', [req.params.id]);
+      void sendPushNotification([employeeRows[0]?.employee_id], 'New HR answer', 'HR has answered your conversation.');
+    } else {
+      const [adminRows] = await pool.query("SELECT id FROM employees WHERE role = 'admin'");
+      void sendPushNotification(adminRows.map((row) => row.id), 'New employee message', `${req.user.matricule} sent a new message.`);
+    }
     return res.json({ ok: true, message: 'Reply added successfully' });
   } catch (error) {
     console.error('Reply ticket error', error);

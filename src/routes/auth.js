@@ -40,9 +40,10 @@ router.post('/auth/verify-credentials', async (req, res) => {
 
     const [methodRows] = await pool.query('SELECT email, phone, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employeeWithEmail = methodRows[0];
-    const hasEnabledMethod = Boolean(isTwoFactorGloballyEnabled() && employeeWithEmail?.two_factor_enabled && ((employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email)) || (employeeWithEmail?.phone && isMethodEnabled('sms', employeeWithEmail.phone))));
+    const twoFactorEnabled = isTwoFactorGloballyEnabled() && Boolean(employeeWithEmail?.two_factor_enabled);
+    const hasEnabledMethod = Boolean((employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email)) || (employeeWithEmail?.phone && isMethodEnabled('sms', employeeWithEmail.phone)));
 
-    if (!hasEnabledMethod) {
+    if (!twoFactorEnabled) {
       const token = signToken({ matricule: employee.matricule, role: employee.role, id: employee.id });
       return res.json({
         token,
@@ -50,6 +51,10 @@ router.post('/auth/verify-credentials', async (req, res) => {
         name: employee.name,
         role: employee.role,
       });
+    }
+
+    if (!hasEnabledMethod) {
+      return res.status(503).json({ code: 'TWO_FACTOR_NOT_CONFIGURED', message: '2FA is enabled, but no Gmail or SMS provider is configured for this account' });
     }
 
     return res.status(204).send();
@@ -74,6 +79,10 @@ router.post('/auth/2fa/methods', async (req, res) => {
     }
     if (employee.phone && isMethodEnabled('sms', employee.phone)) {
       methods.push('sms');
+    }
+
+    if (methods.length === 0) {
+      return res.status(503).json({ message: '2FA is enabled, but no Gmail or SMS provider is configured for this account' });
     }
 
     return res.json({ methods });

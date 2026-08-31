@@ -125,6 +125,18 @@ CREATE TABLE IF NOT EXISTS support_messages (
   INDEX idx_created_at (created_at)
 );
 
+-- Expo push tokens for background notifications.
+CREATE TABLE IF NOT EXISTS push_tokens (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  employee_id INT NOT NULL,
+  token VARCHAR(255) UNIQUE NOT NULL,
+  platform VARCHAR(20),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  INDEX idx_push_employee (employee_id)
+);
+
 -- Seed data (optional)
 INSERT INTO employees (matricule, name, password_hash, role, department, phone, state, sector, address_line_1, address_line_2)
 VALUES

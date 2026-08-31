@@ -56,6 +56,24 @@ TWILIO_AUTH_TOKEN=<twilio_auth_token>
 TWILIO_FROM_NUMBER=<twilio_phone_number>
 ```
 
+For background push notifications, create or link an Expo EAS project and add
+its project ID to the frontend app configuration:
+
+```json
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "<expo-project-id>"
+      }
+    }
+  }
+}
+```
+
+Build a native Android/iOS app after adding this value. Push notifications do
+not work in Expo web or on a device without a native development/production build.
+
 **For PlanetScale:** Your connection string looks like:
 ```
 mysql://user:password@host/dbname

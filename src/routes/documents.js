@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authRequired } from '../utils/auth.js';
+import { sendPushNotification } from '../services/pushNotifications.js';
 
 const router = Router();
 
@@ -110,6 +111,8 @@ router.post('/document-requests', authRequired, async (req, res) => {
     const createdAt = new Date().toISOString();
 
     await pool.query('INSERT INTO document_request_messages (request_id, sender, content) VALUES (?, ?, ?)', [result.insertId, 'employee', reason || `Requested ${type}`]);
+    const [adminRows] = await pool.query("SELECT id FROM employees WHERE role = 'admin'");
+    void sendPushNotification(adminRows.map((row) => row.id), 'New document request', `${req.user.matricule} submitted a document request.`);
 
     return res.status(201).json({
       id: String(result.insertId),
@@ -143,6 +146,7 @@ router.post('/document-requests/:id/replies', authRequired, async (req, res) => 
       await pool.query('INSERT INTO document_request_messages (request_id, sender, content) VALUES (?, ?, ?)', [req.params.id, 'hr', message]);
     }
     await pool.query('UPDATE document_requests SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
+    void sendPushNotification([requestRows[0].employee_id], 'Document request updated', `Your document request is now ${nextStatus}.`);
 
     const [rows] = await pool.query('SELECT * FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC', [req.params.id]);
     const [hrRows] = await pool.query("SELECT name, matricule FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");

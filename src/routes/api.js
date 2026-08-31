@@ -4,6 +4,7 @@ import profileRoutes from './profile.js';
 import newsRoutes from './news.js';
 import documentRoutes from './documents.js';
 import supportRoutes from './support.js';
+import notificationRoutes from './notifications.js';
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use(profileRoutes);
 router.use(newsRoutes);
 router.use(documentRoutes);
 router.use(supportRoutes);
+router.use(notificationRoutes);
 
 export default router;
