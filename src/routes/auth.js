@@ -48,11 +48,15 @@ router.post('/auth/2fa/methods', async (req, res) => {
   const { matricule } = req.body || {};
   if (!matricule) return res.status(400).json({ message: 'Matricule is required' });
   try {
-    const [rows] = await pool.query('SELECT phone, email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [rows] = await pool.query('SELECT email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employee = rows[0];
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    const destinations = { sms: employee.phone, whatsapp: employee.phone, email: employee.email };
-    const methods = Object.keys(destinations).filter((method) => isMethodEnabled(method, destinations[method]));
+
+    const methods = [];
+    if (employee.email && isMethodEnabled('email', employee.email)) {
+      methods.push('email');
+    }
+
     return res.json({ methods });
   } catch (error) {
     console.error('2FA methods error', error);
@@ -61,16 +65,17 @@ router.post('/auth/2fa/methods', async (req, res) => {
 });
 
 router.post('/auth/2fa/send', async (req, res) => {
-  const { matricule, method = 'sms' } = req.body || {};
+  const { matricule, method = 'email' } = req.body || {};
   if (!matricule) return res.status(400).json({ message: 'Matricule is required' });
-  if (!['sms', 'whatsapp', 'email'].includes(method)) return res.status(400).json({ message: 'Unsupported 2FA method' });
+  if (method !== 'email') return res.status(400).json({ message: 'Only Gmail is supported for 2FA' });
 
   try {
-    const [rows] = await pool.query('SELECT id, phone, email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [rows] = await pool.query('SELECT id, email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employee = rows[0];
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    const destination = method === 'email' ? employee.email : employee.phone;
-    if (!destination) return res.status(400).json({ message: `No ${method} destination is configured for this employee` });
+    if (!employee.email) return res.status(400).json({ message: 'No Gmail address is configured for this employee' });
+
+    const destination = employee.email;
     const code = generateCode();
     await pool.query(`INSERT INTO two_factor_challenges (employee_id, method, destination, code_hash, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))`, [employee.id, method, destination, hashCode(code)]);
     await deliverCode({ method, destination, code });
