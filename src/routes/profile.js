@@ -15,6 +15,8 @@ function employeeToProfile(row) {
     addressLine1: row.address_line_1 || undefined,
     addressLine2: row.address_line_2 || undefined,
     phone: row.phone || undefined,
+    email: row.email || undefined,
+    twoFactorEnabled: Boolean(row.two_factor_enabled),
     avatarUrl: row.avatar_url || undefined,
   };
 }
@@ -41,11 +43,15 @@ router.patch('/profile', authRequired, async (req, res) => {
       address_line_1: updates.addressLine1 ?? employee.address_line_1,
       address_line_2: updates.addressLine2 ?? employee.address_line_2,
       phone: updates.phone ?? employee.phone,
+      email: updates.email ?? employee.email,
+      two_factor_enabled: typeof updates.twoFactorEnabled === 'boolean'
+        ? updates.twoFactorEnabled
+        : Boolean(employee.two_factor_enabled),
       avatar_url: updates.avatarUrl ?? employee.avatar_url,
     };
     await pool.query(
-      'UPDATE employees SET address_line_1 = ?, address_line_2 = ?, phone = ?, avatar_url = ? WHERE matricule = ?',
-      [values.address_line_1, values.address_line_2, values.phone, values.avatar_url, req.user.matricule],
+      'UPDATE employees SET address_line_1 = ?, address_line_2 = ?, phone = ?, email = ?, two_factor_enabled = ?, avatar_url = ? WHERE matricule = ?',
+      [values.address_line_1, values.address_line_2, values.phone, values.email, values.two_factor_enabled, values.avatar_url, req.user.matricule],
     );
     const [updatedRows] = await pool.query('SELECT * FROM employees WHERE matricule = ?', [req.user.matricule]);
     return res.json(employeeToProfile(updatedRows[0]));

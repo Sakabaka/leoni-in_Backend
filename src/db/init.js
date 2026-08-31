@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS employees (
   role ENUM('user', 'admin') NOT NULL DEFAULT 'user',
   department VARCHAR(255),
   phone VARCHAR(50),
+  email VARCHAR(255),
+  two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   state VARCHAR(255),
   sector VARCHAR(255),
   address_line_1 VARCHAR(255),

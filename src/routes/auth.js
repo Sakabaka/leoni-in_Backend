@@ -38,9 +38,9 @@ router.post('/auth/verify-credentials', async (req, res) => {
       return res.status(401).json({ code: 'INVALID_CREDENTIALS', message: 'Invalid matricule or password' });
     }
 
-    const [methodRows] = await pool.query('SELECT email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [methodRows] = await pool.query('SELECT email, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employeeWithEmail = methodRows[0];
-    const hasEnabledMethod = Boolean(employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email));
+    const hasEnabledMethod = Boolean(employeeWithEmail?.two_factor_enabled && employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email));
 
     if (!hasEnabledMethod) {
       const token = signToken({ matricule: employee.matricule, role: employee.role, id: employee.id });
@@ -63,9 +63,10 @@ router.post('/auth/2fa/methods', async (req, res) => {
   const { matricule } = req.body || {};
   if (!matricule) return res.status(400).json({ message: 'Matricule is required' });
   try {
-    const [rows] = await pool.query('SELECT email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [rows] = await pool.query('SELECT email, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employee = rows[0];
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
+    if (!employee.two_factor_enabled) return res.status(400).json({ message: '2FA is disabled for this employee' });
 
     const methods = [];
     if (employee.email && isMethodEnabled('email', employee.email)) {

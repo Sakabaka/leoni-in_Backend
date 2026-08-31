@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS employees (
   department VARCHAR(255),
   phone VARCHAR(50),
   email VARCHAR(255),
+  two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   state VARCHAR(255),
   sector VARCHAR(255),
   address_line_1 VARCHAR(255),
@@ -148,3 +149,16 @@ SET @email_sql = IF(@email_column_exists = 0,
 PREPARE email_statement FROM @email_sql;
 EXECUTE email_statement;
 DEALLOCATE PREPARE email_statement;
+
+-- Upgrade existing installations created before explicit 2FA preferences.
+SET @two_factor_column_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'employees' AND COLUMN_NAME = 'two_factor_enabled'
+);
+SET @two_factor_sql = IF(@two_factor_column_exists = 0,
+  'ALTER TABLE employees ADD COLUMN two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE AFTER email',
+  'SELECT 1'
+);
+PREPARE two_factor_statement FROM @two_factor_sql;
+EXECUTE two_factor_statement;
+DEALLOCATE PREPARE two_factor_statement;
