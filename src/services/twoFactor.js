@@ -1,7 +1,8 @@
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 const TEST_CODE = process.env.TWO_FACTOR_TEST_CODE || '123456';
-const SUPPORTED_PROVIDERS = new Set(['console', 'twilio', 'resend', 'whatsapp']);
+const SUPPORTED_PROVIDERS = new Set(['console', 'twilio', 'gmail']);
 
 export function providerForMethod(method) {
   return process.env[`TWO_FACTOR_${method.toUpperCase()}_PROVIDER`] || process.env.TWO_FACTOR_PROVIDER || (process.env.NODE_ENV === 'production' ? null : 'console');
@@ -9,6 +10,10 @@ export function providerForMethod(method) {
 
 export function isMethodEnabled(method, destination) {
   return Boolean(destination && SUPPORTED_PROVIDERS.has(providerForMethod(method)));
+}
+
+export function isTwoFactorGloballyEnabled() {
+  return process.env.TWO_FACTOR_ENABLED === 'true';
 }
 
 export function generateCode() {
@@ -58,32 +63,13 @@ export async function deliverCode({ method, destination, code }) {
     return { provider, method };
   }
 
-  if (provider === 'resend') {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESEND_FROM_EMAIL;
-    if (!apiKey || !from) throw new Error('Resend environment variables are missing');
+  if (provider === 'gmail') {
+    const user = process.env.GMAIL_USER;
+    const password = process.env.GMAIL_APP_PASSWORD;
+    if (!user || !password) throw new Error('Gmail environment variables are missing');
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [destination], subject: 'Leoni-in verification code', text: message }),
-    });
-    if (!response.ok) throw new Error(`Email delivery failed with status ${response.status}`);
-    return { provider, method };
-  }
-
-  if (provider === 'whatsapp') {
-    const token = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    const templateName = process.env.WHATSAPP_TEMPLATE_NAME;
-    if (!token || !phoneNumberId || !templateName) throw new Error('WhatsApp environment variables are missing');
-
-    const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', to: destination, type: 'template', template: { name: templateName, language: { code: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US' }, components: [{ type: 'body', parameters: [{ type: 'text', text: code }] }] } }),
-    });
-    if (!response.ok) throw new Error(`WhatsApp delivery failed with status ${response.status}`);
+    const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass: password } });
+    await transporter.sendMail({ from: user, to: destination, subject: 'Leoni-in verification code', text: message });
     return { provider, method };
   }
 

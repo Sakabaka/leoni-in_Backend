@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authRequired } from '../utils/auth.js';
+import { isMethodEnabled } from '../services/twoFactor.js';
 
 const router = Router();
 
@@ -49,6 +50,9 @@ router.patch('/profile', authRequired, async (req, res) => {
         : Boolean(employee.two_factor_enabled),
       avatar_url: updates.avatarUrl ?? employee.avatar_url,
     };
+    if (values.two_factor_enabled && !((values.email && isMethodEnabled('email', values.email)) || (values.phone && isMethodEnabled('sms', values.phone)))) {
+      return res.status(400).json({ message: 'Add a configured Gmail address or SMS number before enabling 2FA' });
+    }
     await pool.query(
       'UPDATE employees SET address_line_1 = ?, address_line_2 = ?, phone = ?, email = ?, two_factor_enabled = ?, avatar_url = ? WHERE matricule = ?',
       [values.address_line_1, values.address_line_2, values.phone, values.email, values.two_factor_enabled, values.avatar_url, req.user.matricule],

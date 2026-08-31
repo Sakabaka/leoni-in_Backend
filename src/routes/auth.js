@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db/pool.js';
 import { signToken } from '../utils/auth.js';
 import { validateMatricule, validatePassword } from '../utils/validation.js';
-import { codesMatch, deliverCode, generateCode, hashCode, isMethodEnabled } from '../services/twoFactor.js';
+import { codesMatch, deliverCode, generateCode, hashCode, isMethodEnabled, isTwoFactorGloballyEnabled } from '../services/twoFactor.js';
 
 const router = Router();
 
@@ -38,9 +38,9 @@ router.post('/auth/verify-credentials', async (req, res) => {
       return res.status(401).json({ code: 'INVALID_CREDENTIALS', message: 'Invalid matricule or password' });
     }
 
-    const [methodRows] = await pool.query('SELECT email, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [methodRows] = await pool.query('SELECT email, phone, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employeeWithEmail = methodRows[0];
-    const hasEnabledMethod = Boolean(employeeWithEmail?.two_factor_enabled && employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email));
+    const hasEnabledMethod = Boolean(isTwoFactorGloballyEnabled() && employeeWithEmail?.two_factor_enabled && ((employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email)) || (employeeWithEmail?.phone && isMethodEnabled('sms', employeeWithEmail.phone))));
 
     if (!hasEnabledMethod) {
       const token = signToken({ matricule: employee.matricule, role: employee.role, id: employee.id });
@@ -63,14 +63,17 @@ router.post('/auth/2fa/methods', async (req, res) => {
   const { matricule } = req.body || {};
   if (!matricule) return res.status(400).json({ message: 'Matricule is required' });
   try {
-    const [rows] = await pool.query('SELECT email, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [rows] = await pool.query('SELECT email, phone, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employee = rows[0];
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    if (!employee.two_factor_enabled) return res.status(400).json({ message: '2FA is disabled for this employee' });
+    if (!isTwoFactorGloballyEnabled() || !employee.two_factor_enabled) return res.json({ methods: [] });
 
     const methods = [];
     if (employee.email && isMethodEnabled('email', employee.email)) {
       methods.push('email');
+    }
+    if (employee.phone && isMethodEnabled('sms', employee.phone)) {
+      methods.push('sms');
     }
 
     return res.json({ methods });
@@ -83,15 +86,16 @@ router.post('/auth/2fa/methods', async (req, res) => {
 router.post('/auth/2fa/send', async (req, res) => {
   const { matricule, method = 'email' } = req.body || {};
   if (!matricule) return res.status(400).json({ message: 'Matricule is required' });
-  if (method !== 'email') return res.status(400).json({ message: 'Only Gmail is supported for 2FA' });
+  if (!['email', 'sms'].includes(method)) return res.status(400).json({ message: 'Only Gmail and SMS are supported for 2FA' });
 
   try {
-    const [rows] = await pool.query('SELECT id, email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const [rows] = await pool.query('SELECT id, email, phone, two_factor_enabled FROM employees WHERE matricule = ?', [String(matricule).trim()]);
     const employee = rows[0];
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    if (!employee.email) return res.status(400).json({ message: 'No Gmail address is configured for this employee' });
+    if (!isTwoFactorGloballyEnabled() || !employee.two_factor_enabled) return res.status(400).json({ message: '2FA is disabled for this employee' });
 
-    const destination = employee.email;
+    const destination = method === 'sms' ? employee.phone : employee.email;
+    if (!destination || !isMethodEnabled(method, destination)) return res.status(400).json({ message: `No configured ${method === 'sms' ? 'SMS number' : 'Gmail address'} is available for this employee` });
     const code = generateCode();
     await pool.query(`INSERT INTO two_factor_challenges (employee_id, method, destination, code_hash, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))`, [employee.id, method, destination, hashCode(code)]);
     await deliverCode({ method, destination, code });

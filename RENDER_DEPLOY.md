@@ -46,6 +46,14 @@ DB_NAME=leoni_in
 JWT_SECRET=your_super_secret_key_change_this
 JWT_EXPIRES_IN=7d
 NODE_ENV=production
+TWO_FACTOR_ENABLED=false
+TWO_FACTOR_EMAIL_PROVIDER=gmail
+TWO_FACTOR_SMS_PROVIDER=twilio
+GMAIL_USER=<company_gmail_address>
+GMAIL_APP_PASSWORD=<gmail_app_password>
+TWILIO_ACCOUNT_SID=<twilio_account_sid>
+TWILIO_AUTH_TOKEN=<twilio_auth_token>
+TWILIO_FROM_NUMBER=<twilio_phone_number>
 ```
 
 **For PlanetScale:** Your connection string looks like:
