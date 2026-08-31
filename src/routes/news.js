@@ -9,7 +9,8 @@ function profileFilters(employee) {
 }
 
 function buildArticleBody(post, blocks = []) {
-  const blockText = blocks
+  const orderedBlocks = [...blocks].sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+  const blockText = orderedBlocks
     .filter((block) => block && block.id != null)
     .map((block) => {
       if (block.type === 'heading') return `\n${block.content}`;
@@ -29,20 +30,28 @@ router.get('/news', authRequired, async (req, res) => {
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
     const filters = profileFilters(employee);
     const [rows] = await pool.query(
-      `SELECT p.*, JSON_ARRAYAGG(JSON_OBJECT('id', b.id, 'type', b.type, 'content', b.content, 'imageUrl', b.image_url, 'order', b.order)) AS blocks FROM news_posts p LEFT JOIN news_blocks b ON b.news_post_id = p.id WHERE p.status = 'published' AND (p.start_date IS NULL OR p.start_date <= CURDATE()) AND (p.end_date IS NULL OR p.end_date >= CURDATE())` +
+      `SELECT p.*, (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', b.id, 'type', b.type, 'content', b.content, 'imageUrl', b.image_url, 'order', b.order)) FROM news_blocks b WHERE b.news_post_id = p.id ORDER BY b.order) AS blocks FROM news_posts p WHERE p.status = 'published' AND (p.start_date IS NULL OR p.start_date <= CURDATE()) AND (p.end_date IS NULL OR p.end_date >= CURDATE())` +
       (filters.city ? ' AND (p.city IS NULL OR p.city = ?)' : '') +
       (filters.sector ? ' AND (p.sector IS NULL OR p.sector = ?)' : '') +
-      ' GROUP BY p.id ORDER BY p.published_at DESC',
+      ' ORDER BY p.published_at DESC',
       [filters.city, filters.sector].filter(Boolean),
     );
     return res.json(rows.map((post) => {
       const parsedBlocks = typeof post.blocks === 'string' ? JSON.parse(post.blocks) : post.blocks;
       const blocks = Array.isArray(parsedBlocks) ? parsedBlocks : [];
+      const normalizedBlocks = blocks.map((block) => ({
+        id: String(block?.id ?? `${post.id}-block-${block?.order ?? 0}`),
+        type: block?.type || 'paragraph',
+        content: block?.content || '',
+        imageUrl: block?.imageUrl || block?.image_url || undefined,
+        order: Number(block?.order ?? 0),
+      }));
       return {
         id: String(post.id),
         title: post.title,
-        body: buildArticleBody(post, blocks),
+        body: buildArticleBody(post, normalizedBlocks),
         date: post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : new Date(post.created_at).toISOString().slice(0, 10),
+        blocks: normalizedBlocks,
       };
     }));
   } catch (error) {
@@ -53,7 +62,7 @@ router.get('/news', authRequired, async (req, res) => {
 
 router.get('/news/posts', authRequired, async (_req, res) => {
   try {
-    const [rows] = await pool.query(`SELECT p.*, JSON_ARRAYAGG(JSON_OBJECT('id', b.id, 'type', b.type, 'content', b.content, 'imageUrl', b.image_url, 'order', b.order)) AS blocks FROM news_posts p LEFT JOIN news_blocks b ON b.news_post_id = p.id GROUP BY p.id ORDER BY p.created_at DESC`);
+    const [rows] = await pool.query(`SELECT p.*, (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', b.id, 'type', b.type, 'content', b.content, 'imageUrl', b.image_url, 'order', b.order)) FROM news_blocks b WHERE b.news_post_id = p.id ORDER BY b.order) AS blocks FROM news_posts p ORDER BY p.created_at DESC`);
     return res.json(rows.map((post) => {
       const parsedBlocks = typeof post.blocks === 'string' ? JSON.parse(post.blocks) : post.blocks;
       const blocks = Array.isArray(parsedBlocks) ? parsedBlocks.filter((block) => block?.id != null) : [];
@@ -79,8 +88,10 @@ router.post('/news/posts', authRequired, async (req, res) => {
     await connection.beginTransaction();
     const [result] = await connection.query(`INSERT INTO news_posts (title, slug, status, author, summary, published_at, start_date, end_date, city, sector) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [title.trim(), slug, status, author, summary || null, status === 'published' ? (startDate || new Date()) : null, startDate || null, endDate || null, city || null, sector || null]);
     for (const [index, block] of blocks.entries()) {
-      if (!['heading', 'paragraph', 'image'].includes(block.type) || !block.content) continue;
-      await connection.query('INSERT INTO news_blocks (news_post_id, type, content, image_url, `order`) VALUES (?, ?, ?, ?, ?)', [result.insertId, block.type, block.content, block.imageUrl || null, index + 1]);
+      if (!['heading', 'paragraph', 'image'].includes(block.type)) continue;
+      const content = block.type === 'image' ? (block.content || block.imageUrl || '') : (block.content || '');
+      if (!String(content).trim()) continue;
+      await connection.query('INSERT INTO news_blocks (news_post_id, type, content, image_url, `order`) VALUES (?, ?, ?, ?, ?)', [result.insertId, block.type, block.type === 'image' ? (block.content || block.imageUrl || '') : block.content, block.imageUrl || null, index + 1]);
     }
     await connection.commit();
     return res.status(201).json({ id: String(result.insertId), title: title.trim(), slug, status, author, summary: summary || '', createdAt: new Date().toISOString(), publishedAt: status === 'published' ? (startDate || new Date().toISOString()) : undefined, startDate, endDate, city, sector, blocks });
