@@ -8,11 +8,17 @@ This backend is being scaffolded to match the frontend mock API contract and the
 - JWT auth
 - modules for auth, users, news, documents, tickets, profile
 
-## Planned setup
-1. Install dependencies: npm install
-2. Copy .env.example to .env and update values
-3. Create MySQL database and run schema initialization
-4. Start server: npm run dev
+## Documentation
+
+- [APP_GUIDE.md](APP_GUIDE.md): how the app works, roles, authentication, requests, messaging, and notifications
+- [INFRASTRUCTURE_MIGRATION.md](INFRASTRUCTURE_MIGRATION.md): how to connect the app to a client's infrastructure and build the APK
+
+## Local setup
+
+1. Install dependencies: `npm install`
+2. Copy the environment values into a local `.env` file
+3. Create a MySQL database and run schema initialization
+4. Start the server: `npm run dev`
 
 ## Current mapping from frontend mock API
 - Auth/login + 2FA password verification
