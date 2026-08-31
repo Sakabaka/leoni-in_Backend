@@ -76,6 +76,7 @@ router.get('/document-requests/:id', authRequired, async (req, res) => {
     return res.json({
       id: String(request.id),
       matricule: request.matricule,
+      employeeName: request.employee_name,
       type: request.type,
       reason: request.reason || undefined,
       status: request.status,
@@ -124,7 +125,7 @@ router.post('/document-requests', authRequired, async (req, res) => {
 
 router.post('/document-requests/:id/replies', authRequired, async (req, res) => {
   const { message, status } = req.body || {};
-  if (!message) return res.status(400).json({ message: 'Message is required' });
+  if (!message && !(req.user.role === 'admin' && status)) return res.status(400).json({ message: 'Message or status is required' });
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only HR administrators can answer document requests' });
 
   try {
@@ -134,7 +135,9 @@ router.post('/document-requests/:id/replies', authRequired, async (req, res) => 
     const allowedStatuses = new Set(['pending', 'in_progress', 'approved', 'rejected']);
     const nextStatus = status || 'in_progress';
     if (!allowedStatuses.has(nextStatus)) return res.status(400).json({ message: 'Invalid document request status' });
-    await pool.query('INSERT INTO document_request_messages (request_id, sender, content) VALUES (?, ?, ?)', [req.params.id, 'hr', message]);
+    if (message) {
+      await pool.query('INSERT INTO document_request_messages (request_id, sender, content) VALUES (?, ?, ?)', [req.params.id, 'hr', message]);
+    }
     await pool.query('UPDATE document_requests SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
 
     const [rows] = await pool.query('SELECT * FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC', [req.params.id]);
