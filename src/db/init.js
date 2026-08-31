@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS document_requests (
   employee_id INT NOT NULL,
   type ENUM('fiche_paie', 'attestation_salaire', 'attestation_travail') NOT NULL,
   reason TEXT,
+  attachment_name VARCHAR(255),
+  attachment_mime VARCHAR(100),
+  attachment_size INT UNSIGNED,
+  attachment_data MEDIUMBLOB,
   status ENUM('pending', 'in_progress', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE

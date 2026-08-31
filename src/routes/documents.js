@@ -2,6 +2,18 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { authRequired } from '../utils/auth.js';
 import { sendPushNotification } from '../services/pushNotifications.js';
+import multer from 'multer';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+
+function requestAttachment(request) {
+  if (!request.attachment_name || !request.attachment_data) return undefined;
+  return {
+    name: request.attachment_name,
+    mimeType: request.attachment_mime || 'application/octet-stream',
+    size: request.attachment_size || 0,
+  };
+}
 
 const router = Router();
 
@@ -32,6 +44,7 @@ router.get('/document-requests', authRequired, async (req, res) => {
         id: String(row.id),
         matricule: row.matricule,
         employeeName: row.employee_name,
+        attachment: requestAttachment(row),
         type: row.type,
         reason: row.reason || undefined,
         status: row.status,
@@ -81,6 +94,7 @@ router.get('/document-requests/:id', authRequired, async (req, res) => {
       id: String(request.id),
       matricule: request.matricule,
       employeeName: request.employee_name,
+      attachment: requestAttachment(request),
       type: request.type,
       reason: request.reason || undefined,
       status: request.status,
@@ -173,6 +187,46 @@ router.post('/document-requests/:id/replies', authRequired, async (req, res) => 
   } catch (error) {
     console.error('Reply document request error', error);
     return res.status(500).json({ message: 'Unable to add reply' });
+  }
+});
+
+router.post('/document-requests/:id/attachment', authRequired, upload.single('file'), async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only HR administrators can attach files' });
+  if (!req.file) return res.status(400).json({ message: 'A file is required' });
+
+  try {
+    const [rows] = await pool.query('SELECT employee_id FROM document_requests WHERE id = ?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Document request not found' });
+    await pool.query(
+      'UPDATE document_requests SET attachment_name = ?, attachment_mime = ?, attachment_size = ?, attachment_data = ? WHERE id = ?',
+      [req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer, req.params.id],
+    );
+    void sendPushNotification([rows[0].employee_id], 'Document attached', 'HR attached a file to your document request.');
+    return res.json({ name: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size });
+  } catch (error) {
+    console.error('Attach document error', error);
+    return res.status(500).json({ message: 'Unable to attach file' });
+  }
+});
+
+router.get('/document-requests/:id/attachment', authRequired, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      req.user.role === 'admin'
+        ? 'SELECT attachment_name, attachment_mime, attachment_size, attachment_data FROM document_requests WHERE id = ?'
+        : 'SELECT d.attachment_name, d.attachment_mime, d.attachment_size, d.attachment_data FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE d.id = ? AND e.matricule = ?',
+      req.user.role === 'admin' ? [req.params.id] : [req.params.id, req.user.matricule],
+    );
+    const attachment = rows[0];
+    if (!attachment?.attachment_data) return res.status(404).json({ message: 'No attachment found' });
+    return res.json({
+      name: attachment.attachment_name,
+      mimeType: attachment.attachment_mime || 'application/octet-stream',
+      data: Buffer.from(attachment.attachment_data).toString('base64'),
+    });
+  } catch (error) {
+    console.error('Download document error', error);
+    return res.status(500).json({ message: 'Unable to download attachment' });
   }
 });
 

@@ -22,12 +22,11 @@ CREATE TABLE IF NOT EXISTS employees (
   INDEX idx_matricule (matricule),
   INDEX idx_role (role)
 );
-
--- Short-lived, single-use 2FA challenges. Only the code hash is stored.
+-- Short-lived, single-use Gmail/SMS 2FA challenges. Only the code hash is stored.
 CREATE TABLE IF NOT EXISTS two_factor_challenges (
   id INT PRIMARY KEY AUTO_INCREMENT,
   employee_id INT NOT NULL,
-  method ENUM('sms', 'whatsapp', 'email') NOT NULL,
+  method ENUM('sms', 'email') NOT NULL,
   destination VARCHAR(255) NOT NULL,
   code_hash CHAR(64) NOT NULL,
   expires_at DATETIME NOT NULL,
@@ -78,6 +77,10 @@ CREATE TABLE IF NOT EXISTS document_requests (
   employee_id INT NOT NULL,
   type ENUM('fiche_paie', 'attestation_salaire', 'attestation_travail') NOT NULL,
   reason TEXT,
+  attachment_name VARCHAR(255),
+  attachment_mime VARCHAR(100),
+  attachment_size INT UNSIGNED,
+  attachment_data MEDIUMBLOB,
   status ENUM('pending', 'in_progress', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -136,41 +139,3 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
   INDEX idx_push_employee (employee_id)
 );
-
--- Seed data (optional)
-INSERT INTO employees (matricule, name, password_hash, role, department, phone, state, sector, address_line_1, address_line_2)
-VALUES
-  ('1234', 'John Doe', '$2a$10$5f.Tbs36wMqSkNbiqsDylemOnkpTJwFVJ1dP6i2pj1TCiyictLjim', 'user', 'Engineering', '+21600000001', 'Sousse', 'EX1', '12 Main Street', 'Sousse, Tunisia'),
-  ('9999', 'Sara Admin', '$2a$10$lxuKbvtmtet.ivb3B47LIOvc4g2Ae76alVpBFcQtiXSrrdAqLhB0C', 'admin', 'Human Resources', '+21600000002', 'Tunis', 'HQ', '42 Avenue de la République', 'Tunis, Tunisia')
-ON DUPLICATE KEY UPDATE name = VALUES(name);
-
-INSERT INTO news_posts (title, slug, status, author, summary, published_at, start_date, end_date, city, sector)
-VALUES
-  ('Welcome to the new HR portal', 'welcome-to-the-new-hr-portal', 'published', 'HR Team', 'A quick overview of the new employee experience and benefits available this quarter.', '2026-08-02 09:05:00', '2026-08-01', '2026-12-31', 'Sousse', 'EX1')
-ON DUPLICATE KEY UPDATE title = VALUES(title);
-
--- Upgrade existing installations created before email and 2FA were added.
-SET @email_column_exists = (
-  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'employees' AND COLUMN_NAME = 'email'
-);
-SET @email_sql = IF(@email_column_exists = 0,
-  'ALTER TABLE employees ADD COLUMN email VARCHAR(255) NULL AFTER phone',
-  'SELECT 1'
-);
-PREPARE email_statement FROM @email_sql;
-EXECUTE email_statement;
-DEALLOCATE PREPARE email_statement;
-
--- Upgrade existing installations created before explicit 2FA preferences.
-SET @two_factor_column_exists = (
-  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'employees' AND COLUMN_NAME = 'two_factor_enabled'
-);
-SET @two_factor_sql = IF(@two_factor_column_exists = 0,
-  'ALTER TABLE employees ADD COLUMN two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE AFTER email',
-  'SELECT 1'
-);
-PREPARE two_factor_statement FROM @two_factor_sql;
-EXECUTE two_factor_statement;
-DEALLOCATE PREPARE two_factor_statement;
