@@ -37,6 +37,21 @@ router.post('/auth/verify-credentials', async (req, res) => {
     if (!employee || !await bcrypt.compare(String(password), employee.password_hash)) {
       return res.status(401).json({ code: 'INVALID_CREDENTIALS', message: 'Invalid matricule or password' });
     }
+
+    const [methodRows] = await pool.query('SELECT email FROM employees WHERE matricule = ?', [String(matricule).trim()]);
+    const employeeWithEmail = methodRows[0];
+    const hasEnabledMethod = Boolean(employeeWithEmail?.email && isMethodEnabled('email', employeeWithEmail.email));
+
+    if (!hasEnabledMethod) {
+      const token = signToken({ matricule: employee.matricule, role: employee.role, id: employee.id });
+      return res.json({
+        token,
+        matricule: employee.matricule,
+        name: employee.name,
+        role: employee.role,
+      });
+    }
+
     return res.status(204).send();
   } catch (error) {
     console.error('Verify credentials route error', error);
