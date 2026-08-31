@@ -23,8 +23,9 @@ router.get('/document-requests', authRequired, async (req, res) => {
         'SELECT id, sender, content, created_at FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC',
         [row.id],
       );
-      const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+      const [hrRows] = await pool.query("SELECT name, matricule FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
       const hrName = hrRows[0]?.name || 'HR';
+      const hrMatricule = hrRows[0]?.matricule;
 
       return {
         id: String(row.id),
@@ -39,6 +40,7 @@ router.get('/document-requests', authRequired, async (req, res) => {
           id: String(message.id),
           sender: message.sender,
           senderName: message.sender === 'hr' ? hrName : row.employee_name,
+          senderMatricule: message.sender === 'hr' ? hrMatricule : row.matricule,
           content: message.content,
           createdAt: message.created_at,
         })),
@@ -70,8 +72,9 @@ router.get('/document-requests/:id', authRequired, async (req, res) => {
       'SELECT id, sender, content, created_at FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC',
       [req.params.id],
     );
-    const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+    const [hrRows] = await pool.query("SELECT name, matricule FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
     const hrName = hrRows[0]?.name || 'HR';
+    const hrMatricule = hrRows[0]?.matricule;
 
     return res.json({
       id: String(request.id),
@@ -86,6 +89,7 @@ router.get('/document-requests/:id', authRequired, async (req, res) => {
         id: String(message.id),
         sender: message.sender,
         senderName: message.sender === 'hr' ? hrName : request.employee_name,
+        senderMatricule: message.sender === 'hr' ? hrMatricule : request.matricule,
         content: message.content,
         createdAt: message.created_at,
       })),
@@ -141,8 +145,9 @@ router.post('/document-requests/:id/replies', authRequired, async (req, res) => 
     await pool.query('UPDATE document_requests SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
 
     const [rows] = await pool.query('SELECT * FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC', [req.params.id]);
-    const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+    const [hrRows] = await pool.query("SELECT name, matricule FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
     const hrName = hrRows[0]?.name || 'HR';
+    const hrMatricule = hrRows[0]?.matricule;
 
     return res.json({
       id: String(req.params.id),
@@ -156,6 +161,7 @@ router.post('/document-requests/:id/replies', authRequired, async (req, res) => 
         id: String(entry.id),
         sender: entry.sender,
         senderName: entry.sender === 'hr' ? hrName : requestRows[0].employee_name,
+        senderMatricule: entry.sender === 'hr' ? hrMatricule : requestRows[0].matricule,
         content: entry.content,
         createdAt: entry.created_at,
       })),

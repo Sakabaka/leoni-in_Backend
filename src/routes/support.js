@@ -9,8 +9,9 @@ router.get('/support-tickets', authRequired, async (req, res) => {
     const [rows] = await pool.query(req.user.role === 'admin'
       ? 'SELECT t.*, e.matricule, e.name AS employee_name FROM support_tickets t JOIN employees e ON e.id = t.employee_id ORDER BY t.created_at DESC'
       : 'SELECT t.*, e.matricule, e.name AS employee_name FROM support_tickets t JOIN employees e ON e.id = t.employee_id WHERE e.matricule = ? ORDER BY t.created_at DESC', req.user.role === 'admin' ? [] : [req.user.matricule]);
-    const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+    const [hrRows] = await pool.query("SELECT name, matricule FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
     const hrName = hrRows[0]?.name || 'HR';
+    const hrMatricule = hrRows[0]?.matricule;
     const result = await Promise.all(rows.map(async (ticket) => {
       const [messageRows] = await pool.query('SELECT * FROM support_messages WHERE ticket_id = ? ORDER BY created_at ASC', [ticket.id]);
       return {
@@ -19,6 +20,7 @@ router.get('/support-tickets', authRequired, async (req, res) => {
         messages: messageRows.map((message) => ({
           id: String(message.id), sender: message.sender,
           senderName: message.sender === 'hr' ? hrName : ticket.employee_name,
+          senderMatricule: message.sender === 'hr' ? hrMatricule : ticket.matricule,
           content: message.content, createdAt: message.created_at,
         })),
       };
@@ -41,9 +43,10 @@ router.get('/support-tickets/:id', authRequired, async (req, res) => {
     if (!ticketRows.length) return res.status(404).json({ message: 'Support ticket not found' });
     const ticket = ticketRows[0];
     const [messageRows] = await pool.query('SELECT * FROM support_messages WHERE ticket_id = ? ORDER BY created_at ASC', [req.params.id]);
-    const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+    const [hrRows] = await pool.query("SELECT name, matricule FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
     const hrName = hrRows[0]?.name || 'HR';
-    return res.json({ id: String(ticket.id), category: ticket.category, subject: ticket.subject, status: ticket.status, createdAt: ticket.created_at, messages: messageRows.map((message) => ({ id: String(message.id), sender: message.sender, senderName: message.sender === 'hr' ? hrName : ticket.employee_name, content: message.content, createdAt: message.created_at })) });
+    const hrMatricule = hrRows[0]?.matricule;
+    return res.json({ id: String(ticket.id), category: ticket.category, subject: ticket.subject, status: ticket.status, createdAt: ticket.created_at, messages: messageRows.map((message) => ({ id: String(message.id), sender: message.sender, senderName: message.sender === 'hr' ? hrName : ticket.employee_name, senderMatricule: message.sender === 'hr' ? hrMatricule : ticket.matricule, content: message.content, createdAt: message.created_at })) });
   } catch (error) {
     console.error('Get ticket details error', error);
     return res.status(500).json({ message: 'Unable to fetch ticket' });
