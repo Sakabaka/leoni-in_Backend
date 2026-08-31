@@ -12,8 +12,10 @@ router.get('/docs', authRequired, (_req, res) => res.json([
 router.get('/document-requests', authRequired, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT d.* FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE e.matricule = ? ORDER BY d.created_at DESC',
-      [req.user.matricule],
+      req.user.role === 'admin'
+        ? 'SELECT d.*, e.matricule, e.name AS employee_name FROM document_requests d JOIN employees e ON e.id = d.employee_id ORDER BY d.created_at DESC'
+        : 'SELECT d.*, e.matricule, e.name AS employee_name FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE e.matricule = ? ORDER BY d.created_at DESC',
+      req.user.role === 'admin' ? [] : [req.user.matricule],
     );
 
     const result = await Promise.all(rows.map(async (row) => {
@@ -21,10 +23,13 @@ router.get('/document-requests', authRequired, async (req, res) => {
         'SELECT id, sender, content, created_at FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC',
         [row.id],
       );
+      const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+      const hrName = hrRows[0]?.name || 'HR';
 
       return {
         id: String(row.id),
-        matricule: req.user.matricule,
+        matricule: row.matricule,
+        employeeName: row.employee_name,
         type: row.type,
         reason: row.reason || undefined,
         status: row.status,
@@ -33,6 +38,7 @@ router.get('/document-requests', authRequired, async (req, res) => {
         messages: messageRows.map((message) => ({
           id: String(message.id),
           sender: message.sender,
+          senderName: message.sender === 'hr' ? hrName : row.employee_name,
           content: message.content,
           createdAt: message.created_at,
         })),
@@ -49,8 +55,10 @@ router.get('/document-requests', authRequired, async (req, res) => {
 router.get('/document-requests/:id', authRequired, async (req, res) => {
   try {
     const [requestRows] = await pool.query(
-      'SELECT d.*, e.matricule FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE d.id = ? AND e.matricule = ?',
-      [req.params.id, req.user.matricule],
+      req.user.role === 'admin'
+        ? 'SELECT d.*, e.matricule, e.name AS employee_name FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE d.id = ?'
+        : 'SELECT d.*, e.matricule, e.name AS employee_name FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE d.id = ? AND e.matricule = ?',
+      req.user.role === 'admin' ? [req.params.id] : [req.params.id, req.user.matricule],
     );
 
     if (!requestRows.length) {
@@ -62,6 +70,8 @@ router.get('/document-requests/:id', authRequired, async (req, res) => {
       'SELECT id, sender, content, created_at FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC',
       [req.params.id],
     );
+    const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+    const hrName = hrRows[0]?.name || 'HR';
 
     return res.json({
       id: String(request.id),
@@ -74,6 +84,7 @@ router.get('/document-requests/:id', authRequired, async (req, res) => {
       messages: messageRows.map((message) => ({
         id: String(message.id),
         sender: message.sender,
+        senderName: message.sender === 'hr' ? hrName : request.employee_name,
         content: message.content,
         createdAt: message.created_at,
       })),
@@ -114,16 +125,21 @@ router.post('/document-requests', authRequired, async (req, res) => {
 router.post('/document-requests/:id/replies', authRequired, async (req, res) => {
   const { message, status } = req.body || {};
   if (!message) return res.status(400).json({ message: 'Message is required' });
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only HR administrators can answer document requests' });
 
   try {
-    const [requestRows] = await pool.query('SELECT d.*, e.matricule FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE d.id = ?', [req.params.id]);
+    const [requestRows] = await pool.query('SELECT d.*, e.matricule, e.name AS employee_name FROM document_requests d JOIN employees e ON e.id = d.employee_id WHERE d.id = ?', [req.params.id]);
     if (!requestRows.length) return res.status(404).json({ message: 'Document request not found' });
 
+    const allowedStatuses = new Set(['pending', 'in_progress', 'approved', 'rejected']);
     const nextStatus = status || 'in_progress';
+    if (!allowedStatuses.has(nextStatus)) return res.status(400).json({ message: 'Invalid document request status' });
     await pool.query('INSERT INTO document_request_messages (request_id, sender, content) VALUES (?, ?, ?)', [req.params.id, 'hr', message]);
     await pool.query('UPDATE document_requests SET status = ? WHERE id = ?', [nextStatus, req.params.id]);
 
     const [rows] = await pool.query('SELECT * FROM document_request_messages WHERE request_id = ? ORDER BY created_at ASC', [req.params.id]);
+    const [hrRows] = await pool.query("SELECT name FROM employees WHERE role = 'admin' ORDER BY id LIMIT 1");
+    const hrName = hrRows[0]?.name || 'HR';
 
     return res.json({
       id: String(req.params.id),
@@ -136,6 +152,7 @@ router.post('/document-requests/:id/replies', authRequired, async (req, res) => 
       messages: rows.map((entry) => ({
         id: String(entry.id),
         sender: entry.sender,
+        senderName: entry.sender === 'hr' ? hrName : requestRows[0].employee_name,
         content: entry.content,
         createdAt: entry.created_at,
       })),
